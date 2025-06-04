@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TextbookProject, PDFDocument, ProcessingStep } from '../types';
 
+// --- Configuration --- //
+const defaultProjectStyle = {
+  fontFamily: 'serif',
+  fontSize: 12,
+  primaryColor: '#1E3A8A',
+  includeImages: true,
+  includeHighlights: true,
+  chapterNumbering: true,
+};
+
+// --- Context Type --- //
 interface ProjectContextType {
   projects: TextbookProject[];
   currentProject: TextbookProject | null;
@@ -17,15 +28,6 @@ interface ProjectContextType {
   exportTextbook: (format: 'pdf' | 'docx' | 'html') => Promise<void>;
 }
 
-const defaultProjectStyle = {
-  fontFamily: 'serif',
-  fontSize: 12,
-  primaryColor: '#1E3A8A',
-  includeImages: true,
-  includeHighlights: true,
-  chapterNumbering: true,
-};
-
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,6 +43,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem('textbookProjects', JSON.stringify(projects));
   }, [projects]);
 
+  // --- Project Management --- //
   const createProject = (title: string) => {
     const newProject: TextbookProject = {
       id: Date.now().toString(),
@@ -51,7 +54,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       chapters: [],
       style: defaultProjectStyle,
     };
-    
     setProjects([...projects, newProject]);
     setCurrentProjectState(newProject);
     setCurrentStep('upload');
@@ -62,14 +64,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setCurrentProjectState(null);
       return;
     }
-    
     const project = projects.find(p => p.id === projectId) || null;
     setCurrentProjectState(project);
     setCurrentStep(project?.documents.length ? 'extract' : 'upload');
   };
 
   const updateProjects = (updatedProject: TextbookProject) => {
-    setProjects(projects.map(p => 
+    setProjects(projects.map(p =>
       p.id === updatedProject.id ? updatedProject : p
     ));
     setCurrentProjectState(updatedProject);
@@ -77,105 +78,117 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addDocument = (document: PDFDocument) => {
     if (!currentProject) return;
-    
     const updatedProject = {
       ...currentProject,
       documents: [...currentProject.documents, document],
       updatedAt: Date.now(),
     };
-    
     updateProjects(updatedProject);
   };
 
   const removeDocument = (documentId: string) => {
     if (!currentProject) return;
-    
     const updatedProject = {
       ...currentProject,
       documents: currentProject.documents.filter(d => d.id !== documentId),
       updatedAt: Date.now(),
     };
-    
     updateProjects(updatedProject);
   };
 
   const updateDocument = (document: PDFDocument) => {
     if (!currentProject) return;
-    
     const updatedProject = {
       ...currentProject,
-      documents: currentProject.documents.map(d => 
+      documents: currentProject.documents.map(d =>
         d.id === document.id ? document : d
       ),
       updatedAt: Date.now(),
     };
-    
     updateProjects(updatedProject);
   };
 
   const updateProjectTitle = (title: string) => {
     if (!currentProject) return;
-    
     const updatedProject = {
       ...currentProject,
       title,
       updatedAt: Date.now(),
     };
-    
     updateProjects(updatedProject);
   };
 
-  // Simulate textbook generation with AI
+  // --- AI Textbook Generation (Real LLM Integration) --- //
   const generateTextbook = async () => {
     if (!currentProject) return;
-    
     setLoading(true);
-    
+
     try {
-      // Simulate AI processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Generate sample chapters for demo
-      const sampleChapters = Array(3).fill(null).map((_, i) => ({
-        id: `chapter-${i+1}`,
-        title: `Chapter ${i+1}: ${['Introduction', 'Key Concepts', 'Advanced Topics'][i]}`,
-        sections: Array(3).fill(null).map((_, j) => ({
-          id: `section-${i+1}-${j+1}`,
-          title: `Section ${j+1}`,
-          content: `This is sample content for section ${j+1} of chapter ${i+1}. In a real implementation, this would be AI-generated content based on the uploaded PDF documents.`
-        }))
-      }));
-      
+      // Combine all PDF text content for the prompt
+      const pdfTextContent = currentProject.documents.map(doc => doc.content).join('\n\n');
+
+      // --- LLM API Call (Ollama, Llama.cpp, Replicate, etc.) --- //
+      // You can swap this out for any LLM API endpoint.
+      const llamaPrompt = `
+        Generate a detailed textbook outline (with chapters and sections) based on the following content:
+        ${pdfTextContent}
+      `;
+
+      const response = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama2',
+          prompt: llamaPrompt,
+          stream: false
+        })
+      });
+
+      if (!response.ok) throw new Error('LLM API error');
+
+      const data = await response.json();
+      const aiText = data.response;
+
+      // Parse aiText into chapters/sections (improve as needed)
+      const sampleChapters = [{
+        id: 'chapter-1',
+        title: 'AI-Generated Chapter',
+        sections: [{
+          id: 'section-1-1',
+          title: 'Generated Content',
+          content: aiText
+        }]
+      }];
+
       const updatedProject = {
         ...currentProject,
         chapters: sampleChapters,
         updatedAt: Date.now(),
       };
-      
+
       updateProjects(updatedProject);
       setCurrentStep('preview');
     } catch (error) {
       console.error('Error generating textbook:', error);
+      alert('Failed to generate textbook. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  // --- Export Textbook --- //
   const exportTextbook = async (format: 'pdf' | 'docx' | 'html') => {
     if (!currentProject) return;
-    
     setLoading(true);
-    
+
     try {
       // Simulate export process
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
       // In a real implementation, this would generate and download the file
-      console.log(`Exporting textbook in ${format} format...`);
-      
       alert(`Textbook "${currentProject.title}" has been exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error('Error exporting textbook:', error);
+      alert('Failed to export textbook.');
     } finally {
       setLoading(false);
     }
