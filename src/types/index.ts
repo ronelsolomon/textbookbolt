@@ -8,6 +8,7 @@ export interface PDFDocument {
   error?: string;
   content?: string;
   thumbnail?: string;
+  url: string;
 }
 
 export interface TextbookSection {

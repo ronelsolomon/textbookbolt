@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TextbookProject, PDFDocument, ProcessingStep } from '../types';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 // --- Configuration --- //
 const defaultProjectStyle = {
@@ -76,14 +80,54 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentProjectState(updatedProject);
   };
 
-  const addDocument = (document: PDFDocument) => {
+  const addDocument = async (document: PDFDocument) => {
     if (!currentProject) return;
-    const updatedProject = {
-      ...currentProject,
-      documents: [...currentProject.documents, document],
-      updatedAt: Date.now(),
-    };
-    updateProjects(updatedProject);
+    
+    try {
+      // Load and process the PDF
+      const pdf = await pdfjsLib.getDocument(document.url).promise;
+      let fullContent = '';
+      
+      // Extract text from all pages
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map(item => 'str' in item ? item.str : '')
+          .join(' ');
+        fullContent += pageText + '\n\n';
+      }
+
+      // Update document with extracted content
+      const processedDocument: PDFDocument = {
+        ...document,
+        content: fullContent,
+        status: 'ready',
+      };
+
+      const updatedProject = {
+        ...currentProject,
+        documents: [...currentProject.documents, processedDocument],
+        updatedAt: Date.now(),
+      };
+      
+      updateProjects(updatedProject);
+    } catch (error) {
+      console.error('Error processing PDF:', error);
+      const failedDocument: PDFDocument = {
+        ...document,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to process PDF',
+      };
+      
+      const updatedProject = {
+        ...currentProject,
+        documents: [...currentProject.documents, failedDocument],
+        updatedAt: Date.now(),
+      };
+      
+      updateProjects(updatedProject);
+    }
   };
 
   const removeDocument = (documentId: string) => {
@@ -118,17 +162,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updateProjects(updatedProject);
   };
 
-  // --- AI Textbook Generation (Real LLM Integration) --- //
+  // --- AI Textbook Generation --- //
   const generateTextbook = async () => {
     if (!currentProject) return;
     setLoading(true);
 
     try {
-      // Combine all PDF text content for the prompt
       const pdfTextContent = currentProject.documents.map(doc => doc.content).join('\n\n');
 
-      // --- LLM API Call (Ollama, Llama.cpp, Replicate, etc.) --- //
-      // You can swap this out for any LLM API endpoint.
       const llamaPrompt = `
         Generate a detailed textbook outline (with chapters and sections) based on the following content:
         ${pdfTextContent}
@@ -149,7 +190,6 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const data = await response.json();
       const aiText = data.response;
 
-      // Parse aiText into chapters/sections (improve as needed)
       const sampleChapters = [{
         id: 'chapter-1',
         title: 'AI-Generated Chapter',
@@ -182,9 +222,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLoading(true);
 
     try {
-      // Simulate export process
       await new Promise(resolve => setTimeout(resolve, 1500));
-      // In a real implementation, this would generate and download the file
       alert(`Textbook "${currentProject.title}" has been exported as ${format.toUpperCase()}`);
     } catch (error) {
       console.error('Error exporting textbook:', error);
