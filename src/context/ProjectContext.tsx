@@ -133,39 +133,75 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const pdfTextContent = currentProject.documents.map(doc => doc.content).join('\n\n');
 
-      const llamaPrompt = `
-        Generate a detailed textbook outline (with chapters and sections) based on the following content:
-        ${pdfTextContent}
+      const prompt = `
+        Task: Create a textbook outline with chapters and sections based on the following content.
+        Format the response as JSON with the following structure:
+        {
+          "chapters": [
+            {
+              "title": "Chapter Title",
+              "sections": [
+                {
+                  "title": "Section Title",
+                  "content": "Section content..."
+                }
+              ]
+            }
+          ]
+        }
+        
+        Content: ${pdfTextContent}
       `;
 
-      const response = await fetch('http://localhost:11434/api/generate', {
+      const response = await fetch('https://api-inference.huggingface.co/models/google/flan-t5-large', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          model: 'llama2',
-          prompt: llamaPrompt,
-          stream: false
+          inputs: prompt,
+          parameters: {
+            max_length: 2000,
+            temperature: 0.7,
+            top_p: 0.9,
+            do_sample: true
+          }
         })
       });
 
-      if (!response.ok) throw new Error('LLM API error');
+      if (!response.ok) throw new Error('AI generation failed');
 
       const data = await response.json();
-      const aiText = data.response;
+      let parsedData;
+      
+      try {
+        parsedData = JSON.parse(data[0].generated_text);
+      } catch (e) {
+        // If JSON parsing fails, create a simple chapter structure
+        parsedData = {
+          chapters: [{
+            title: 'Generated Content',
+            sections: [{
+              title: 'Overview',
+              content: data[0].generated_text
+            }]
+          }]
+        };
+      }
 
-      const sampleChapters = [{
-        id: 'chapter-1',
-        title: 'AI-Generated Chapter',
-        sections: [{
-          id: 'section-1-1',
-          title: 'Generated Content',
-          content: aiText
-        }]
-      }];
+      const formattedChapters = parsedData.chapters.map((chapter: any, i: number) => ({
+        id: `chapter-${i + 1}`,
+        title: chapter.title,
+        sections: chapter.sections.map((section: any, j: number) => ({
+          id: `section-${i + 1}-${j + 1}`,
+          title: section.title,
+          content: section.content
+        }))
+      }));
 
       const updatedProject = {
         ...currentProject,
-        chapters: sampleChapters,
+        chapters: formattedChapters,
         updatedAt: Date.now(),
       };
 
