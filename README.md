@@ -1,6 +1,4 @@
-**README.md** for your project, assuming it’s a React+Vite app that lets users upload PDFs and uses an LLM (like Llama via Ollama or a cloud API) to generate and export textbooks.
 
----
 
 # 📚 AI Textbook Generator
 
