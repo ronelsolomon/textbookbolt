@@ -80,54 +80,17 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentProjectState(updatedProject);
   };
 
-  const addDocument = async (document: PDFDocument) => {
+  const addDocument = (document: PDFDocument) => {
     if (!currentProject) return;
     
-    try {
-      // Load and process the PDF
-      const pdf = await pdfjsLib.getDocument(document.url).promise;
-      let fullContent = '';
-      
-      // Extract text from all pages
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map(item => 'str' in item ? item.str : '')
-          .join(' ');
-        fullContent += pageText + '\n\n';
-      }
-
-      // Update document with extracted content
-      const processedDocument: PDFDocument = {
-        ...document,
-        content: fullContent,
-        status: 'ready',
-      };
-
-      const updatedProject = {
-        ...currentProject,
-        documents: [...currentProject.documents, processedDocument],
-        updatedAt: Date.now(),
-      };
-      
-      updateProjects(updatedProject);
-    } catch (error) {
-      console.error('Error processing PDF:', error);
-      const failedDocument: PDFDocument = {
-        ...document,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Failed to process PDF',
-      };
-      
-      const updatedProject = {
-        ...currentProject,
-        documents: [...currentProject.documents, failedDocument],
-        updatedAt: Date.now(),
-      };
-      
-      updateProjects(updatedProject);
-    }
+    // Simply add the processed document to the project
+    const updatedProject = {
+      ...currentProject,
+      documents: [...currentProject.documents, document],
+      updatedAt: Date.now(),
+    };
+    
+    updateProjects(updatedProject);
   };
 
   const removeDocument = (documentId: string) => {
